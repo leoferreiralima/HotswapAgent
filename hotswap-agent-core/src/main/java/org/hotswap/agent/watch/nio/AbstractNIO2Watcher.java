@@ -44,7 +44,11 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.hotswap.agent.config.PluginConfiguration;
+import org.hotswap.agent.config.PluginManager;
 import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.logging.AgentLogger.Level;
 import org.hotswap.agent.watch.WatchEventListener;
@@ -92,12 +96,23 @@ public abstract class AbstractNIO2Watcher implements Watcher {
 
     @Override
     public synchronized void addEventListener(ClassLoader classLoader, URI pathPrefix, WatchEventListener listener) {
+
         File path;
         try {
             // check that it is regular file
             // toString() is weird and solves HiarchicalUriException for URI
             // like "file:./src/resources/file.txt".
             path = new File(pathPrefix);
+            PluginConfiguration configuration = PluginManager.getInstance().getPluginConfiguration(classLoader);
+            if(configuration != null){
+                for(Pattern excludedWatchFilePattern : configuration.getExcludedWatchFilePatterns()){
+                    Matcher matcher = excludedWatchFilePattern.matcher(path.getAbsolutePath());
+                    if(matcher.matches()) {
+                        LOGGER.debug("Ignoring watch for path {}",pathPrefix);
+                        return;
+                    }
+                }
+            }
          } catch (IllegalArgumentException e) {
             if (!LOGGER.isLevelEnabled(Level.TRACE)) {
                 LOGGER.warning("Unable to watch for path {}, not a local regular file or directory.", pathPrefix);

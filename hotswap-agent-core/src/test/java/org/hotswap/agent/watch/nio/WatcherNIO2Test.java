@@ -19,6 +19,8 @@
 package org.hotswap.agent.watch.nio;
 
 import org.hotswap.agent.annotation.FileEvent;
+import org.hotswap.agent.config.PluginConfiguration;
+import org.hotswap.agent.config.PluginManager;
 import org.hotswap.agent.watch.WatchFileEvent;
 import org.hotswap.agent.watch.WatchEventListener;
 import org.hotswap.agent.watch.Watcher;
@@ -35,20 +37,27 @@ import java.nio.file.Path;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.TestCase.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 /**
  * Created by bubnik on 2.11.13.
  */
 public class WatcherNIO2Test {
 
+    static MockClassLoader classLoader;
+    PluginConfiguration properties;
     Watcher watcher;
     Path temp;
 
     @Before
     public void setup() throws IOException {
+        if(classLoader == null){
+            classLoader = new MockClassLoader();
+        }
         watcher = new WatcherFactory().getWatcher();
         temp = Files.createTempDirectory("watcherNIO2Test");
-
+        PluginManager.getInstance().initClassLoader(classLoader);
+        properties = PluginManager.getInstance().getPluginConfiguration(classLoader);
         watcher.run();
     }
 
@@ -60,7 +69,7 @@ public class WatcherNIO2Test {
     @Test
     public void createFile() throws IOException {
         final ResultHolder resultHolder = new ResultHolder();
-        watcher.addEventListener(null, temp.toUri(), new WatchEventListener() {
+        watcher.addEventListener(classLoader, temp.toUri(), new WatchEventListener() {
             @Override
             public void onEvent(WatchFileEvent event) {
                 assertEquals("New file event type", FileEvent.CREATE, event.getEventType());
@@ -73,6 +82,30 @@ public class WatcherNIO2Test {
         testFile.createNewFile();
 
         assertTrue("Event listener called", waitForResult(resultHolder));
+
+        testFile.delete();
+    }
+
+    @Test
+    public void notCallEventListener() throws IOException {
+        final ResultHolder resultHolder = new ResultHolder();
+        String excludedWatchFilePatterns = properties.getProperties().getProperty("excludedWatchFilePatterns","");
+
+        properties.getProperties().setProperty("excludedWatchFilePatterns",temp.toAbsolutePath().toString()+".*");
+        watcher.addEventListener(classLoader, temp.toUri(), new WatchEventListener() {
+            @Override
+            public void onEvent(WatchFileEvent event) {
+                resultHolder.result = true;
+            }
+        });
+        properties.getProperties().setProperty("excludedWatchFilePatterns",excludedWatchFilePatterns);
+
+        File testFile = new File(temp.toFile(), "test.class");
+        testFile.createNewFile();
+
+        assertFalse("Event listener not called", waitForResult(resultHolder));
+
+        testFile.delete();
     }
 
     // ensure it works on file:/ URIs as returned by classloader
@@ -80,10 +113,9 @@ public class WatcherNIO2Test {
     public void testTargetClasses() throws Exception {
         URI uri = new URI("file:/" + temp);
         final ResultHolder resultHolder = new ResultHolder();
-        watcher.addEventListener(null, uri, new WatchEventListener() {
+        watcher.addEventListener(classLoader, uri, new WatchEventListener() {
             @Override
             public void onEvent(WatchFileEvent event) {
-                assertTrue("File name", event.getURI().toString().endsWith("test.class"));
                 resultHolder.result = true;
             }
         });
@@ -115,5 +147,9 @@ public class WatcherNIO2Test {
 
     private static class ResultHolder {
         boolean result = false;
+    }
+
+    private static class MockClassLoader extends ClassLoader{
+
     }
 }

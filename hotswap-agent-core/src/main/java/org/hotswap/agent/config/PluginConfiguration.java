@@ -216,6 +216,10 @@ public class PluginConfiguration {
         }
     }
 
+    public Properties getProperties() {
+        return properties;
+    }
+
     /**
      * Get configuration property value
      *
@@ -301,6 +305,17 @@ public class PluginConfiguration {
             ret.add(disabledPlugin.trim());
         }
         return ret;
+    }
+
+    /**
+     * List of disabled plugin names
+     */
+    public List<Pattern> getExcludedWatchFilePatterns() {
+        List<Pattern> watchFilePatterns = new ArrayList<>();
+        for (String disabledPlugin : getProperty("excludedWatchFilePatterns", "").split(",")) {
+            watchFilePatterns.add(Pattern.compile(disabledPlugin.trim()));
+        }
+        return watchFilePatterns;
     }
 
     /**
